@@ -18,12 +18,30 @@ static void enter_button_state( enum Button_state new_state, Button *current_but
 
 #define MINIMUM_PRESS_TIME 100
 #define MAXIMUM_RELEASE_TIME 100
-#define BUTTON_HELD_TIME 200
+#define BUTTON_HELD_TIME 20
 
 #define TRUE 1
 #define FALSE 0
 
-int interval_time;
+int interval_time = 5;
+
+
+int is_button_pressed( Button *current_button, EventQueue *queue )
+{
+    Event e;
+
+    if( read_q(queue, &e))
+    {
+        if( e.event == Button_event_press)
+        {
+            return 1;
+        }
+    }
+    else
+    {
+        return 0;
+    }
+}
 
 /**********************************************************************
 *   Function name: set_button_interval_time
