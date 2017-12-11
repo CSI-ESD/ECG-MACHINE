@@ -62,11 +62,57 @@ void sensorInit (){
 
 }
 
-void fullInit(){
-    generalInit();
+void fullInit(){ //fixme
+    // Initialisation
+
+       WDTCTL = WDTPW | WDTHOLD;    // Stop watchdog timer
+
+       PM5CTL0 &= ~LOCKLPM5;       //Disable the power-on high-impedance mode
+
+       //inputs
+       P1DIR &= ~0x02;         // Setting P1.1 to input (switch2)
+       P1REN |= 0x02;          // Set P1.1 resistor to be pull up enabled
+
+
+       //outputs
+
+       P1DIR |= 0x01;              //Set P1.0 to output
+       P4DIR |=0x40;               //setting P4.0 to output
+
+       //other
+       TA0CCR0 = 1024;            // Count up to 1024
+       TA0CCTL0 = 0x10;            // Enable counter interrupts, bit 4=1
+       TA0CTL =  TASSEL_2 + MC_1;  // Timer A using subsystem master clock, SMCLK(1.1 MHz)
+                                   // and count UP to create a 1ms interrupt
+
+       // LCD
+        P4DIR |= 0x04; // Set P4.2 to output direction (LCD Power On)
+        P4DIR |= 0x08; // Set P4.3 to output direction (LCD Enable)
+        // SPI Ports
+        P1SEL0 &= ~0x40; // Set P1.6 to output direction (SPI MOSI)
+        P1SEL1 |= 0x40; // Set P1.6 to output direction (SPI MOSI)
+        P1DIR |= 0x40; // Set P1.6 to output direction (SPI MOSI)
+        P2SEL0 &= ~0x04; // Set P2.2 to SPI mode (SPI CLK)
+        P2SEL1 |= 0x04; // Set P2.2 to SPI mode (SPI CLK)
+        P2DIR |= 0x04; // Set P2.2 to output direction (SPI CLK)
+        P2DIR |= 0x10; // Set P2.4 to output direction (SPI CS)
+        // SPI Interface
+        UCB0CTLW0 |= UCSWRST;
+        UCB0CTLW0 &= ~(UCCKPH + UCCKPL + UC7BIT + UCMSB);
+        UCB0CTLW0 &= ~(UCSSEL_3);
+        UCB0CTLW0 |= UCSSEL__SMCLK;
+        UCB0BRW = 8;
+        UCB0CTLW0 |= (UCMSB + UCCKPH + 0x00 + UCMST + UCSYNC + UCMODE_0);
+        UCB0CTLW0 &= ~(UCSWRST);
+        P4OUT |= 0x04; // Turn LCD Power On
+        P4OUT |= 0x08; // Enable LCD
+        P1OUT &= ~0x01; // Set P1.0 off (Green LED)
+
+       _BIS_SR(GIE);               // interrupts enabled
+    /* generalInit();
     timerInit();
     ledInit();
     lcdInit();
-    spiInit();
+    spiInit(); */
 }
 
