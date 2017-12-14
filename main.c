@@ -16,7 +16,7 @@ int ECGstate = 0;
  *  what state the board is in right now, being either startup, waveform or menu.
  *  Right now the numbers work as follows : 0 is startup/off (is the default but should be swiftly changed) 1 is waveform, 2 is menu.
  */
-long int systemtimer = 75000; //set this back to 0 before demoing
+long int systemtimer = 0; //set this back to 0 before demoing
 /* This counts how many times the timer has triggered and is a good way of keeping track of how long the system has been
  * running for. It's not only used for debugging, it's also used to decide when the system comes out of the default 'startup' screen
  * Nothing currently resets this value (although probably should). So technically this value will eventually go over the limit and risk crashing the system,
@@ -47,7 +47,9 @@ int button_process_event = 0;
 #pragma vector=TIMER0_A0_VECTOR
 __interrupt void Timer0_A0 (void)   // Timer0 A0 1ms interrupt service routine
 {
-    systemtimer++; //this is currently ticking far too often, it may pay to put it in its own timer that triggers less often
+
+    systemtimer++; //this is
+    //currently ticking far too often, it may pay to put it in its own timer that triggers less often
     sample_button_timer++;
     sample_sensor_timer++;
     if (sample_button_timer >= button_sampling_rate)
@@ -55,24 +57,20 @@ __interrupt void Timer0_A0 (void)   // Timer0 A0 1ms interrupt service routine
         button_timer( &button1, &button1_q );
         button_timer( &button2, &button2_q );
             sample_button_timer = 0;
-
             button_process_event++;
             if( button_process_event >= BUTTON_PROCESS_EVENT_TIME )
             {
                 button_process_event = 0;
                 button1pushed = is_button_pressed( &button1, &button1_q );
                 button2pushed = is_button_pressed( &button2, &button2_q );
-
             }
-
-
         }
-
     if (sample_sensor_timer >= sensors_sampling_rate)
             {
                 //sensors
                 sample_sensor_timer = 0;
             }
+
 
 }
 
@@ -107,53 +105,53 @@ void initialise_button2()
 
 void startuphandling()
 {
-    if(systemtimer <= 15000)
+    if(systemtimer <= 10000)
     {
         writeFormattedText(startupMessage1, strlen(startupMessage1), 0, 0, 12, true);
     }
-    if(systemtimer >= 15000 && systemtimer <= 30000)
+    if(systemtimer >= 10000 && systemtimer <= 20000)
     {
         writeFormattedText(startupMessage2, strlen(startupMessage2), 0, 0, 12, true);
     }
-    if(systemtimer >= 40000 && systemtimer <= 50000)
+    if(systemtimer >= 20000 && systemtimer <= 25000)
     {
         writeFormattedText(helpMessageButtons, strlen(helpMessageButtons), 0, 0, 12, true);
     }
-    if(systemtimer >= 50000 && systemtimer <= 75000)
+    if(systemtimer >= 25000 && systemtimer <= 30000)
     {
         writeFormattedText(helpMessageButtons2, strlen(helpMessageButtons2), 0, 0, 12, true);
     }
-    if(systemtimer >= 75000)
+    if((systemtimer >= 30000) || button1pushed == 1 || button2pushed == 1 )
     {
         ECGstate = 2;       //current it defaults to going to the menu for the prototype however should probabaly go to the waveform mode by default.
     }
 }
 
 int MenuCurrentSelection = 0;
-int asdf = 0;     //FOR THE LOVE OF GOD RENAME THIS ONCE DONE TESTIING
+enum Buttons buttonPressMask = Num_buttons;
+
 void menuflowhandling()
 {
-    initialiseMenuBoxes(3);
-     if (button1pushed == 1) // scroll down one section
+
+     if ((button1pushed == 1)) // scroll down one section
      {
-         if(MenuCurrentSelection == 3)
-         {  //handles what 'choice' is currently selected.
-             MenuCurrentSelection = 0;  //textboxs  'wrap' around
-             asdf = 0;
-         }
-         else
-         {
-             MenuCurrentSelection++;
-             asdf++;
-         }
+         buttonPressMask = Button1;
      }
-     if (button2pushed == 1)// 'enter' key
+     else if (button2pushed == 1)// 'enter' key
      {
 
+         buttonPressMask = Button2;                   /*Buttons.Button2;*/
      }
+     else if((button2pushed == 1 )&&(button1pushed == 1)) // this needs to be here to 'overwrite' it being set to button 2
+     {
 
-     writeTextBoxes(0); //needs to be configured
-     populateTextBox(t3MenuSubOptions1[0], 2, 1, true);
+         buttonPressMask = Num_buttons;     //only happens if bothbuttons are pressed together
+     }
+     else
+     {
+         buttonPressMask = 4;
+     }
+         updateMenuBoxes( buttonPressMask );
 }
 
 
@@ -165,14 +163,17 @@ int main(void) {
         initialise_button2();
 
         set_button_interval_time( button_sampling_rate );
+        int firstimemenu = 0;
 
    while(1)
    {
-       initDisplayBuffer(0xFF);
+
        // this startup phase stuff should maybe moved to its own function to keep main clean. Needs feedback from group
        if(ECGstate == 0) //if in startup mode, this is only run once
        {
+           initDisplayBuffer(0xFF);
            startuphandling();
+           firstimemenu = 1;
        }
 
 
@@ -182,14 +183,20 @@ int main(void) {
            // send sensor data to waveform creating function
            // send waveform to display function
            // send number to screen directly via writeText or call a function that does so
+           firstimemenu = 1;
        }
 
        if (ECGstate == 2) // menu mode
        {
-           menuflowhandling();
+           if(firstimemenu == 1){
+               initialiseMenuBoxes(3);
+               firstimemenu = 0;
+           }
+           if(button1pushed == 1 || button1pushed == 1){
+               menuflowhandling();
+           }
+
        }
-
-
        outputDisplayBuffer();
 
    }
