@@ -5,8 +5,11 @@
 *   This is the header file for buttons.c
 ***********************************************************************/
 
+
+
 #ifndef BUTTONS_H_
 #define BUTTONS_H_
+
 
 #include "event_queue.h"
 
@@ -31,7 +34,8 @@ typedef struct
     unsigned int release_time;
 } Button;
 
+int is_button_pressed( Button *current_button, EventQueue *queue );
 void set_button_interval_time( int button_interval_time );
-void button_timer( Button *current_button, EventQueue *queue );
+void button_timer( Button *current_button, EventQueue *queue ); //turned to int
 
 #endif /* BUTTONS_H_ */
