@@ -6,6 +6,7 @@
 ***********************************************************************/
 #include <msp430.h>
 #include <ctype.h>
+#include <stdbool.h>
 #include "displayLib.h"
 
 /**********************************************************************
@@ -13,27 +14,44 @@
 *   This function writes an array of chars with small space in between
 *   in order to improve readability
 ***********************************************************************/
-    void writeText(char text[], int size, int positionX,int positionY){
+    void writeText(char text[], int size, int positionX,int positionY, bool inverted){
          int i=0;
          for(i=0; i<size; i++){
-             writeChar(text[i],positionX,positionY);
-             positionY++;
+             writeChar(text[i], positionX, positionY, inverted);
+             positionX++;
          }
      }
 
 /**********************************************************************
 *   Function name: writeChar
 *   This function writes a char on the screen at the specified position
+*	Input type: char
 ***********************************************************************/
     void writeChar(char c, int positionX,int positionY){
-         int i=0;
-         int chIndex = charToFontIndex(c);
-         unsigned char *toBeWritten = getChar(chIndex,1);
-             for (i=0; i<8; i++)
-             {
-                 displayBuffer[i+positionX][positionY] = ~toBeWritten[i];
-             }
+		int i=0;
+		if(isalpha(c)){
+			c = toupper(c);
+		}
+        int chIndex = charToFontIndex(c);
+		writeCharFromIndex(chIndex,positionX,positionY,inverted);
      }
+
+/**********************************************************************
+*   Function name: writeCharFromIndex
+*   This function writes a char on the screen at the specified position
+*	Input type: int    
+***********************************************************************/
+	void writeCharFromIndex(int charIndex, int positionX,int positionY, bool inverted){
+         int i=0;
+         unsigned char *toBeWritten = getChar(charIndex,1);
+         for (i=0; i<8; i++){
+         	if(!inverted){
+				displayBuffer[positionX][i + positionY] = ~toBeWritten[i];
+            }else{
+				displayBuffer[positionX][i + positionY] = toBeWritten[i];
+            }
+		 }
+	}
 
 /**********************************************************************
 *   Function name: getChar
@@ -103,8 +121,6 @@
             { (int)'.', 37 },
             { (int)' ', 38 }
             };
-
-            character = toupper(character);
             int i;
 
             for (i = 0; i < sizeof(conversion) / sizeof(conversion[0]); i++){
@@ -112,7 +128,6 @@
                     return conversion[i].output_character;
                 }
             }
-
             return -1;
         }
 
@@ -172,7 +187,7 @@
             for (column=0; column<12; column++){
                 while (!(UCB0IFG & UCTXIFG));
 
-                UCB0TXBUF = displayBuffer[line][column];
+                UCB0TXBUF = displayBuffer[column][line];
             }
 
             while (!(UCB0IFG & UCTXIFG));

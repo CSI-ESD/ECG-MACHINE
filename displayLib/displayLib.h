@@ -8,7 +8,7 @@
 #ifndef DISPLAY_LIB
 #define DISPLAY_LIB
 
-    char displayBuffer[96][96/8];
+    char displayBuffer[96/8][96];
     unsigned char result[8];
 
     char line;
@@ -69,7 +69,8 @@
     void writeText(char[], int, int, int);
 
     void writeChar(char, int, int);
+	
+	void writeCharFromIndex(int charIndex, int positionX,int positionY, bool inverted); 
 
     unsigned char * getChar(int, int);
-
 #endif
