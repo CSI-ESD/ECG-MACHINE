@@ -1,650 +1,229 @@
-/**********************************************************************
-*   File name: menuSimple.c
-*   File owner: Luke Parsons
-*   Most recent editor: Luke Parsons
-
- *  Created on: 23 Nov 2017
-***********************************************************************/
-
-#include <string.h>
+#include <msp430.h>
 #include <stdbool.h>
-#include <ctype.h>
-#include <stdlib.h>
+#include <string.h>
+#include "event_queue.h"
+#include "buttons.h"
 #include "displayLib.h"
 #include "menuSimple.h"
 
+int buttonpressedflag;
+int button_sampling_rate = 2;
+int sensors_sampling_rate = 1;
+int ECGstate = 0;
+/*
+ * This int is a way of keeping track of what 'state' the screen is in - this way the scheduler can skip over unnesseary code
+ *  Realistically this should be moved into its own function (which I can make) which will serve as an overlal controller for
+ *  what state the board is in right now, being either startup, waveform or menu.
+ *  Right now the numbers work as follows : 0 is startup/off (is the default but should be swiftly changed) 1 is waveform, 2 is menu.
+ */
+long int systemtimer = 0; //set this back to 0 before demoing
+/* This counts how many times the timer has triggered and is a good way of keeping track of how long the system has been
+ * running for. It's not only used for debugging, it's also used to decide when the system comes out of the default 'startup' screen
+ * Nothing currently resets this value (although probably should). So technically this value will eventually go over the limit and risk crashing the system,
+ * however this should be many cycles into the system, so this doesn't need to be implemented for the prototype phase.
+ */
 
-/*******************************************
- *       DATA DEFINITIONS
- ******************************************/
+
+
+// these should probably be moved to the button header
+Button button1;
+Button button2;
+
+EventQueue button1_q;
+EventQueue button2_q;
+
+int sample_button_timer = 1;
+int sample_sensor_timer = 1;
+int button1pushed = 0;
+int button2pushed = 0;
+Event e;
+
+int button_process_event = 0;
+#define BUTTON_PROCESS_EVENT_TIME 50
+
+
+#pragma vector=TIMER0_A0_VECTOR
+__interrupt void Timer0_A0 (void)   // Timer0 A0 1ms interrupt service routine
+{
+
+    systemtimer++; //this is
+    //currently ticking far too often, it may pay to put it in its own timer that triggers less often
+    sample_button_timer++;
+    sample_sensor_timer++;
+    if (sample_button_timer >= button_sampling_rate)
+        {
+        button_timer( &button1, &button1_q );
+        button_timer( &button2, &button2_q );
+            sample_button_timer = 0;
+            button_process_event++;
+            if( button_process_event >= BUTTON_PROCESS_EVENT_TIME )
+            {
+                button_process_event = 0;
+                button1pushed = is_button_pressed( &button1, &button1_q );
+                button2pushed = is_button_pressed( &button2, &button2_q );
+            }
+        }
+    if (sample_sensor_timer >= sensors_sampling_rate)
+            {
+                //sensors
+                sample_sensor_timer = 0;
+            }
+
+
+}
+
+
+//Display buffer
 
 /*
- * This is for updateMenuBoxes so it can keep track of the button presses
- * and not overflow
- */
-enum Buttons menuButtonPressQueue[MAX_MENU_BUTTON_PRESS_QUEUE_SIZE]; //Might be used in f
-/*
- * named as t[x][direction]Border
- * where x = thickness(t) of border (1-3)
- * direction = left | right
- */
-const short t1Thickness = 3;
-const char t1LeftBorder = ~0xE0;
-const char t1RightBorder = ~0x07;
+ *
+ *  note to self move this to button header at some point*/
 
-const short t2Thickness = 2;
-const char t2LeftBorder = ~0xC0;
-const char t2RightBorder = ~0x03;
+void initialise_button1()
+{
+    button1.button_num = Button1;
+    button1.current_state = Button_released;
+    button1.press_time = 0;
+    button1.release_time = 0;
+}
 
-const short t3Thickness = 1;
-const char t3LeftBorder = ~0x80;
-const char t3RightBorder = ~0x01;
+void initialise_button2()
+{
+    button2.button_num = Button2;
+    button2.current_state = Button_released;
+    button2.press_time = 0;
+    button2.release_time = 0;
+}
 
 /*
- * technically only need one of these for the upper & lower border
- * but it could be subject to change in the future for some reason
- * so declare both seperately. This will also make it clearer in the code
- */
-const char topBorder = 0x00;
-const char bottomBorder = 0x00;
-
-/*******************************************
- *       STARTUP/WELCOME MESSAGE
- ******************************************/
-
-#define MAX_STARTUP_MSG_CHARS 144
-const unsigned char startupMessage1[MAX_STARTUP_MSG_CHARS] = "Spaces.the final fontier"
-        "these are the voyages of the USSR Starship Banterprise.Its year long mission";
-
-const unsigned char startupMessage2[MAX_STARTUP_MSG_CHARS] = "to google strange new words.to seek out new forum posts and datasheets.to boldly"
-        " go where no    engineer has gone before";
-
-const unsigned char helpMessageButtons[MAX_STARTUP_MSG_CHARS] = "Button 1     confirm    Button 2     scroll down";
-
-const unsigned char helpMessageButtons2[MAX_STARTUP_MSG_CHARS] = "to alter values like test duration press button 1 on the option to begin"
-        "changing it: button 1   increments   button 2   decrements";
-
-/*******************************************
- *     MENU OPTION TEXT DEFINITIONS
- ******************************************/
-
-/*
- * Return indicates the final option of every menu
- */
-const short t3MenuTextMax = 4;
-const char t3MenuText[t3MenuTextMax][TYPE3_MAX_UCA] =
-{
-     "Test      duration",
-     "help pls", /*This should display a help message when pressed*/
-     "search",
-     "RETURN"
-};
-
-/*
- * These are the menu Sub-options for t3MenuText option number 1
- * This is just an example, but in the future there would be more of these,
- * held within a more advanced container which allows integer/float values for
- * options to be maintained within. For now, just text to use as an example.
- */
-const short t3MenuSubOptions1Max=2;
-const char t3MenuSubOptions1[t3MenuSubOptions1Max][TYPE3_MAX_UCA] =
-{
-    "3min", /*add up & down arrows after text when populating this text box*/
-    "RETURN"
-};
-
-const short t2MenuTextMax = 3;
-const char t2MenuText[t2MenuTextMax][TYPE2_MAX_UCA] = {
-/*    |        |         |         | These indicate the newlines to give an idea of text formatting*/
-     "Example of some longer text",
-     "Another example of some longer text",
-     "RETURN"
-};
-
-const short t1MenuTextMax = 2;
-const char t1MenuText[t1MenuTextMax][TYPE1_MAX_UCA] = {
-     "Here is a bunch of  text which \
-      could be used as an information \
-      hub for disclaimer or something ",
-      "RETURN"
-};
-
-
-/*******************************************
- *     FUNCTION DEFINITIONS
- ******************************************/
-
-
-/**********************************************************************
- * Function name: writeLineOfChars
  *
- * Writes a line of chars (charToWrite) VERTICAL(0) or HORIZONTAL(1)
- * as dictated by the enum LineDirection at position (1-96).
- ***********************************************************************/
-void writeLineOfChars(char charToWrite, short position, LineDirection lineDir)
+ *  note to self move this to button header at some point*/
+
+
+
+
+void startuphandling()
 {
-    int i = 0;
-    if (VERTICAL == lineDir)
+    if(systemtimer <= 10000)
     {
-        for (i = 0; i < MAX_PIXELS_VERT; i++)
+        writeFormattedText(startupMessage1, strlen(startupMessage1), 0, 0, 12, true);
+        if((button2pushed == 1 )||(button1pushed == 1))
         {
-            displayBuffer[position-1][i] = charToWrite;
+            systemtimer = 10000;
         }
     }
-    else
+    if(systemtimer >= 10000 && systemtimer <= 20000)
     {
-        for (i = 0; i < 12; i++)
-        {
-            displayBuffer[i][position-1] = charToWrite;
-        }
+        if((button2pushed == 1 )||(button1pushed == 1))
+                {
+                    systemtimer = 20000;
+                }
+        writeFormattedText(startupMessage2, strlen(startupMessage2), 0, 0, 12, true);
+    }
+    if(systemtimer >= 20000 && systemtimer <= 25000)
+    {
+        if((button2pushed == 1 )||(button1pushed == 1))
+                {
+                    systemtimer = 25000;
+                }
+        writeFormattedText(helpMessageButtons, strlen(helpMessageButtons), 0, 0, 12, true);
+    }
+    if(systemtimer >= 25000 && systemtimer <= 30000)
+    {
+        if((button2pushed == 1 )||(button1pushed == 1))
+                {
+                    systemtimer = 30000;
+                }
+        writeFormattedText(helpMessageButtons2, strlen(helpMessageButtons2), 0, 0, 12, true);
+    }
+    if((systemtimer >= 30000))
+    {
+        ECGstate = 2;       //current it defaults to going to the menu for the prototype however should probabaly go to the waveform mode by default.
     }
 }
 
 
-/**********************************************************************
- * NOTE: Belongs in DisplayLib though leaving it here prior to merge.
- *
- * Function name: writeFormattedText
- *
- * This function takes inText and writes it to the display starting at positionX/Y and
- * accounts for line & word wrapping. note that it will always reset the cursor back to
- * the starting positionX on wrapping using maxCharsPerLine to determine how many characters
- * it can write before it wraps.
- ***********************************************************************/
-void writeFormattedText(const char *inText, int size, int positionX,
-                        int positionY, short maxCharsPerLine, bool inverted)
+
+int MenuCurrentSelection = 0;
+enum Buttons buttonPressMask = No_button;
+
+void menuflowhandling()
 {
-    int i = 0;
-    int index = 0;
-    for (i = 0; i < size; i++)
-    {
-        if (maxCharsPerLine == index)
-        {
-            positionX -= maxCharsPerLine; //Reset cursor
-            positionY += 8; //Newline
-            index = 0;
-        }
-        writeChar( inText[i], positionX, positionY, inverted);
-        ++positionX;
-        ++index;
-    }
+
+     if ((button1pushed == 1) && (button2pushed == 0)) // scroll down one section
+     {
+         buttonPressMask = Button1;
+     }
+     else if ((button2pushed == 1) && (button1pushed == 0)) // 'enter' key
+     {
+
+         buttonPressMask = Button2;                   /*Buttons.Button2;*/
+     }
+     else if((button2pushed == 1 )&&(button1pushed == 1)) // this needs to be here to 'overwrite' it being set to button 2
+     {
+
+         buttonPressMask = Num_buttons;     //only happens if bothbuttons are pressed together
+     }
+     else
+     {
+         buttonPressMask = No_button;
+     }
+     updateMenuBoxes( buttonPressMask );
 }
 
 
-/**********************************************************************
- * Function name: writeHorizontalBorders
- *
- * Using type as an indicator for where to write the borders, populates the
- * outputDisplayBuffer with the border values corresponding to the number of
- * boxes required for the Upper & lower borders of the menuBoxes.
- ***********************************************************************/
-void writeHorizontalBorders(short type)
-{
-    int i = 0, j = 0;
-    int index = 1;
+int main(void) {
 
-    if (MIN_BOXES_ONSCREEN < type < MAX_BOXES_ONSCREEN)
-    {
-        switch (type)
-        {
-        case 1:
-            /* write top borders*/
-            for (i = index; i <= t1Thickness; i++)
-            {
-                writeLineOfChars(topBorder, i, HORIZONTAL);
-            }
-            /* write bottom borders*/
-            index = ((MAX_PIXELS_HORIZ / type) - (t1Thickness-1)); /*re-adjust index */
-            for (i = 0; i < t1Thickness; i++)
-            {
-                writeLineOfChars(bottomBorder, index++, HORIZONTAL);
-            }
-            break;
+    fullInit(); //initlization hardware
 
-        case 2:
-            /* write top borders */
-            for (j = 0; j < type; j++)
-            {
-                index = ((j * (MAX_PIXELS_HORIZ / type)) + 1);
-                for (i = 0; i <= t2Thickness; i++)
-                {
-                    writeLineOfChars(topBorder, index++, HORIZONTAL);
-                }
-            }
+        initialise_button1();
+        initialise_button2();
 
-            /* write Bottom borders */
-            for (j = 1; j <= type; j++)
-            {
-                index = ((j * (MAX_PIXELS_HORIZ / type)) - (t2Thickness - 1));
-                for (i = 0; i <= t2Thickness; i++)
-                {
-                    writeLineOfChars(bottomBorder, index++, HORIZONTAL);
-                }
-            }
-            break;
+        set_button_interval_time( button_sampling_rate );
+        int firstimemenu = 0;
 
-        case 3:
-            /* write top borders */
-            for (j = 0; j < type; j++)
-            {
-                index = ((j * (MAX_PIXELS_HORIZ / type)) + 1);
-                for (i = 0; i <= t3Thickness; i++)
-                {
-                    writeLineOfChars(topBorder, index++, HORIZONTAL);
-                }
-            }
-            /* write Bottom borders */
-            for (j = 1; j <= type; j++)
-            {
-                index = ((j * (MAX_PIXELS_HORIZ / type)) - (t3Thickness));
-                for (i = 0; i <= t3Thickness; i++)
-                {
-                    writeLineOfChars(bottomBorder, index++, HORIZONTAL);
-                }
-            }
-            break;
-        }
-    }
-    else
-    {
-        return; /* add error handling later */
-    }
-}
+   while(1)
+   {
 
-/**********************************************************************
- * Function name: writeVerticalBorders
- *
- * Using type as an indicator for where to write the borders, populates the
- * outputDisplayBuffer with the border values corresponding to the number of
- * boxes required for the left and right borders of the menuBoxes.
- ***********************************************************************/
-int writeVerticalBorders(short type)
-{
-    if (MIN_BOXES_ONSCREEN < type < MAX_BOXES_ONSCREEN)
-    {
-        switch (type)
-        {
+       // this startup phase stuff should maybe moved to its own function to keep main clean. Needs feedback from group
+       if(ECGstate == 0) //if in startup mode, this is only run once
+       {
+           initDisplayBuffer(0xFF);
+           startuphandling();
+           firstimemenu = 1;
+       }
 
-        case 1:
-            /* write left border */
-            writeLineOfChars(t1LeftBorder, 1, VERTICAL);
-            /* write right border */
-            writeLineOfChars(t1RightBorder, 12, VERTICAL);
-            break;
-        case 2:
-            /* write left border */
-            writeLineOfChars(t2LeftBorder, 1, VERTICAL);
-            /* write right border */
-            writeLineOfChars(t2RightBorder, 12, VERTICAL);
-            break;
 
-        case 3:
-            /* write left border */
-            writeLineOfChars(t3LeftBorder, 1, VERTICAL);
-            /* write right border */
-            writeLineOfChars(t3RightBorder, 12, VERTICAL);
-            break;
-        }
-        return 0; /*Needs return statement*/
-    }
-    else
-    {
-        return -1; /* add error handling later */
-    }
-}
 
-/**********************************************************************
- * Function name: writeTextBoxes
- *
- * Using the write[Horizontal/Vertical]Borders() and type as an indicator
- * for the number of boxes to write, populates the outputDisplayBuffer with
- * all borders required for the type.
- ***********************************************************************/
-int writeTextBoxes(short type)
-{
-    if (MIN_BOXES_ONSCREEN < type < MAX_BOXES_ONSCREEN)
-    {
-        /*
-         * First draw our right and left borders which
-         * makes dealing with overwriting simpler.
-         */
-        writeVerticalBorders(type);
-        /* Next the horizontal lines */
-        writeHorizontalBorders(type);
+       if (ECGstate == 1)
+       {
+           initDisplayBuffer(0xff);
+           // if in 'Waveform mode'
+           // send sensor data to waveform creating function
+           // send waveform to display function
+           // send number to screen directly via writeText or call a function that does so
+           if(button1pushed == 1 || button2pushed == 1)
+           {
+               ECGstate = 2;
+               firstimemenu = 1;
+           }
+       }
 
-        return 0; /*Need return statement */
-    }
-    else
-    {
-        return -1; /* add error handling later */
-    }
+       if (ECGstate == 2) // menu mode
+       {
+           if(firstimemenu == 1){
+               initialiseMenuBoxes(3);
+               firstimemenu = 0;
+           }
+           if(button1pushed == 1 || button2pushed == 1){
+               menuflowhandling();
+           }
 
-}
+       }
+       outputDisplayBuffer();
 
-/* TODO FIGURE OUT BEST WAY TO HIGHLIGHT TEXT/TEXTBOX */
+   }
 
-/**********************************************************************
- * Function name: populateTextBox
- *
- * Populates the boxNum with the MenuText. Type is required
- * in order to check for text that is too long to fit inside a single box
- * and would otherwise overwrite other pixels. Currently only in charge
- * of handling text though will in future be extended to deal with
- * integer values like a duration.
- ***********************************************************************/
-int populateTextBox(const char *menuText, short type, short boxNum, bool inverted)
-{
-    int size = 0;
-    int posYIndex=0;
-    if ((MIN_BOXES_ONSCREEN < type < MAX_BOXES_ONSCREEN)
-            && (MIN_BOXES_ONSCREEN < boxNum < MAX_BOXES_ONSCREEN))
-    {
-        switch (type)
-        {
-        case 1:
-            size = strlen(menuText);
-            /* Write the first entry in the type 1 menu text beginning
-             *  at (1,3), using newlines every 10 characters.
-             */
-            if (size > 0)
-            {
-                writeFormattedText(menuText, size, 1, t1Thickness, 10, inverted);
-            }
-            break;
-        case 2:
-            size = strlen(menuText);
-            /* Write the first entry in the type 1 menu text beginning
-             *  at (1,3), using newlines every 10 characters.
-             */
-            if (size > 0)
-            {
-                posYIndex = (((boxNum - 1) * (MAX_PIXELS_HORIZ / type))
-                        + t2Thickness + 1);
-                writeFormattedText(menuText, size, 1, posYIndex, 10, inverted);
-            }
-            break;
-        case 3:
-            size = strlen(menuText);
 
-            if (size > 0)
-            {
-                posYIndex = (((boxNum - 1) * (MAX_PIXELS_HORIZ / type))
-                        + t3Thickness + 1);
-                writeFormattedText(menuText, size, 1, posYIndex, 10, inverted);
-            }
-            break;
-        }
-        return 0; /*Error handling later on*/
-    }
-    else
-    {
-        return -1; /* add error handling later */
-    }
-}
-
-/**********************************************************************
- * Function name: initialiseMenuBoxes
- *
- * Initialisation called whenever entering menu
- * from different screen. Currently only type 3 implemented.
- ***********************************************************************/
-void initialiseMenuBoxes( int type )
-{
-    initDisplayBuffer(0xff);
-    writeTextBoxes(type);
-    //clearButtonPressQueue();
-    populateTextBox(t3MenuText[0], type, 1, true);
-    populateTextBox(t3MenuText[1], type, 2, false);
-    populateTextBox(t3MenuText[2], type, 3, false);
-    /* TODO Add highlight box here */
-}
-
-/**********************************************************************
- * Function name: floatToDuration
- *
- * converts the flooating point value for the menu test duration
- * to a string value that can be used to call populate text boxes and
- * update the screen. Populates the tempDurationText global(temporarily).
- ***********************************************************************/
-
-short menuOptionNumber=0; //These three essentially work as an index to know where we are & how to update
-short highlightedOption=1;
-short menuNestedLevel=1;  //Text to output to boxes
-const short levelOneMax=4;
-int tempDuration = 3; //Default 3 mins
-char tempDurationText[5]; //Default is 3m and min=1 max=5.00
-
-int floatToDuration( float durationIn)
-{
-    //This might be too processing intensive but because it's always gonna be a small number
-    //it doesn't matter so much...i hope
-    int ret = snprintf(tempDurationText, sizeof(tempDurationText), "%5.2f", tempDuration);
-
-    if (ret < 0) {
-        return 0;
-    }
-    if (ret > sizeof(tempDurationText)) {
-        // Result was truncated
-    }
-    return 1;
-}
-
-/**********************************************************************
- * Function name: updateMenuBoxes
- *
- * function called whenever already in displayState MENUBOX
- * and a button press has occurred which the screen needs to be updated for.
- * outputDisplayBuffer() should be called every time after calling this function
- ***********************************************************************/
-
-// SORRY THIS SHIT IS UNREADABLE - Much better version in the future to manage this easier
-
-int updateMenuBoxes( enum Buttons buttonPress )
-{
-    int type = 3; //Default unless overrided
-    if (Button1 == buttonPress)
-    {   // Confirm
-        switch (menuNestedLevel)
-        {
-        case 1: //menuNestedLevel
-            switch (highlightedOption)
-            {
-            case 1: //Test duration
-                type = 2;
-                initDisplayBuffer(0xff);
-                writeTextBoxes(type);
-                populateTextBox(t3MenuSubOptions1[0], type, 1, true);
-                populateTextBox(t3MenuSubOptions1[1], type, 2, false);
-                menuOptionNumber = 1;
-                menuNestedLevel = 2;
-                highlightedOption = 1;
-                break;
-            case 2: //Help Pls
-                type = 1;
-                initDisplayBuffer(0xff);
-                writeFormattedText(helpMessageButtons, strlen(helpMessageButtons), 0, 0, 12, true);
-                menuOptionNumber = 2;
-                menuNestedLevel = 2;
-                highlightedOption = 1;
-                break;
-            case 3: // search
-                //TODO Implement
-                break;
-            case t3MenuTextMax: //Return to ECG screen
-                // TODO Implement ECG screen
-                break;
-            }
-            break;
-
-        case 2: //menuNestedLevel
-            switch (menuOptionNumber)
-            {
-            case 1: //Test duration
-                if(1 == highlightedOption)
-                {   //go into configuration mode (menuNestedLevel = 3)
-                    writeUniqueChar(39, 10, 3, true);
-                    writeUniqueChar(40, 10, 12, true);
-                    menuNestedLevel = 3;
-                    menuOptionNumber = 1;
-                }
-                else if (2 == highlightedOption)
-                {   //return to initial menu screen
-                    initialiseMenuBoxes(3);
-                    menuOptionNumber = 0;
-                    menuNestedLevel = 1;
-                    highlightedOption = 1;
-                }
-                break;
-            case 2: //Help Pls
-                //return to initial menu screen
-                initialiseMenuBoxes(3);
-                menuOptionNumber = 0;
-                menuNestedLevel = 1;
-                highlightedOption = 1;
-                break;
-            }
-            break;
-
-        case 3: //MenuNestedLevel
-            switch( menuOptionNumber)
-            {
-            case 1: //Test duration increment by .5 of a second
-                type = 2;
-                if(!( tempDuration >= 5.00))
-                {
-                    ++tempDuration;
-                    writeChar((tempDuration + '0'), 1, 3, true); //Hoping this won't erase the arrows
-                }
-                break;
-            case 3: //For when we implement search
-                break;
-            }
-            break;
-        }
-
-    }
-    else if (Button2 == buttonPress)
-    {   //Scroll Down
-        switch (menuNestedLevel)
-        {
-        case 1: //menuNestedLevel
-            type = 3;
-            switch (highlightedOption)
-            {
-            case 1:
-                populateTextBox(t3MenuText[0], type, 1, false);
-                populateTextBox(t3MenuText[1], type, 2, true);
-                populateTextBox(t3MenuText[2], type, 3, false);
-                ++highlightedOption;
-                break;
-            case 2:
-                populateTextBox(t3MenuText[0], type, 1, false);
-                populateTextBox(t3MenuText[1], type, 2, false);
-                populateTextBox(t3MenuText[2], type, 3, true);
-                ++highlightedOption;
-                break;
-            case 3:
-                initDisplayBuffer(0xff);
-                writeTextBoxes(3);
-                populateTextBox(t3MenuText[1], type, 1, false);
-                populateTextBox(t3MenuText[2], type, 2, false);
-                populateTextBox(t3MenuText[3], type, 3, true);
-                ++highlightedOption;
-                break;
-            case t3MenuTextMax: //Return to first option
-                populateTextBox(t3MenuText[0], type, 1, true);
-                populateTextBox(t3MenuText[1], type, 2, false);
-                populateTextBox(t3MenuText[2], type, 3, false);
-                highlightedOption=1;
-                break;
-            }
-            break;
-
-        case 2: //menuNestedLevel
-            switch (menuOptionNumber)
-            {
-            case 1: //Test Duration
-                type = 2;
-                if (1 == highlightedOption)
-                {
-                    populateTextBox(t3MenuSubOptions1[0], type, 1, false);
-                    populateTextBox(t3MenuSubOptions1[1], type, 2, true);
-                    highlightedOption = 2;
-                }
-                else if (2 == highlightedOption)
-                {
-                    populateTextBox(t3MenuSubOptions1[0], type, 1, true);
-                    populateTextBox(t3MenuSubOptions1[1], type, 2, false);
-                    highlightedOption = 1;
-                }
-                break;
-
-            case 2: //Help Pls
-                type = 1;
-                if (1 == highlightedOption)
-                {
-                    initDisplayBuffer(0xff);
-                    writeFormattedText(helpMessageButtons, strlen(helpMessageButtons), 0, 0, 12, true);
-                    highlightedOption = 2;
-                }
-                else if (2 == highlightedOption)
-                {
-                    initDisplayBuffer(0xff);
-                    writeFormattedText(helpMessageButtons2, strlen(helpMessageButtons2), 0, 0, 12, true);
-                    highlightedOption = 1;
-                }
-                break;
-
-            case 3: // Search
-                //TODO
-                break;
-
-            }
-            break;
-
-        case 3: //menuNestedLevel
-            type = 2;
-            switch (menuOptionNumber)
-            {
-            case 1: //Test duration decrement by .5 of a second
-                if(!( tempDuration <= 1 ))
-                {
-                    --tempDuration;
-                    writeChar((tempDuration + '0'), 1, 3, true); //Hoping this won't erase the arrows
-                }
-                break;
-            case 3: //For when we implement search
-                break;
-            }
-            break;
-        }
-    }
-    else if ( Num_buttons ) //This can be used as a temporary indicator to mean "Both buttons pressed"
-    {
-        switch(menuNestedLevel)
-        {
-        case 3:
-            switch(menuOptionNumber)
-            {
-            case 1:
-                writeChar(' ', 10, 3,  false);
-                writeChar(' ', 10, 12, false);
-                menuOptionNumber = 1;
-                menuNestedLevel = 2;
-                highlightedOption = 1;
-                break;
-            case 3:
-                //placeholder for search in the future
-                break;
-            }
-            break;
-        }
-    }
-    else
-    {
-        // We dun goofed
-        return -1;
-    }
-
-    return 1;
+return 0;
 }
