@@ -18,7 +18,7 @@ static void enter_button_state( enum Button_state new_state, Button *current_but
 
 #define MINIMUM_PRESS_TIME 100
 #define MAXIMUM_RELEASE_TIME 100
-#define BUTTON_HELD_TIME 20
+#define BUTTON_HELD_TIME 60
 
 #define TRUE 1
 #define FALSE 0
