@@ -17,55 +17,40 @@
     void writeText(char text[], int size, int positionX,int positionY, bool inverted){
          int i=0;
          for(i=0; i<size; i++){
-             writeChar(text[i],positionX,positionY, inverted);
-             ++positionX;
+             writeChar(text[i], positionX, positionY, inverted);
+             positionX++;
          }
      }
 
 /**********************************************************************
 *   Function name: writeChar
 *   This function writes a char on the screen at the specified position
+*	Input type: char
 ***********************************************************************/
     void writeChar(char c, int positionX,int positionY, bool inverted){
-         int i=0;
-         if(isalpha(c))
-         {
-             c = toupper(c);
-         }
-         int chIndex = character_to_displayfont(c);
-         unsigned char *toBeWritten = getChar(chIndex,1);
-             for (i=0; i<8; i++)
-             {
-                 if(!inverted)
-                 {
-                     displayBuffer[positionX][i + positionY] = ~toBeWritten[i];
-                 }
-                 else
-                 {
-                     displayBuffer[positionX][i + positionY] = toBeWritten[i];
-                 }
-
-
-             }
+		if(isalpha(c)){
+			c = toupper(c);
+		}
+        int chIndex = charToFontIndex(c);
+		writeCharFromIndex(chIndex,positionX,positionY,inverted);
      }
 
-    void writeUniqueChar(int charIndex, int positionX,int positionY, bool inverted){
+/**********************************************************************
+*   Function name: writeCharFromIndex
+*   This function writes a char on the screen at the specified position
+*	Input type: int    
+***********************************************************************/
+	void writeCharFromIndex(int charIndex, int positionX,int positionY, bool inverted){
          int i=0;
          unsigned char *toBeWritten = getChar(charIndex,1);
-             for (i=0; i<8; i++)
-             {
-                 if(!inverted)
-                 {
-                     displayBuffer[positionX][i + positionY] = ~toBeWritten[i];
-                 }
-                 else
-                 {
-                     displayBuffer[positionX][i + positionY] = toBeWritten[i];
-                 }
-
-
-             }
-     }
+         for (i=0; i<8; i++){
+         	if(!inverted){
+				displayBuffer[positionX][i + positionY] = ~toBeWritten[i];
+            }else{
+				displayBuffer[positionX][i + positionY] = toBeWritten[i];
+            }
+		 }
+	}
 
 /**********************************************************************
 *   Function name: getChar
@@ -81,68 +66,6 @@
             return result;
             //rest of the cases to be implemented
         }
-        return 0;
-    }
-
-    int character_to_displayfont(const char character)
-    {
-        const static struct
-        {
-            int input_character;
-            int output_character;
-        } conversion[] =
-        {
-            { (int)'0', 0 },
-            { (int)'1', 1 },
-            { (int)'2', 2 },
-            { (int)'3', 3 },
-            { (int)'4', 4 },
-            { (int)'5', 5 },
-            { (int)'6', 6 },
-            { (int)'7', 7 },
-            { (int)'8', 8 },
-            { (int)'9', 9 },
-            { (int)'A', 10 },
-            { (int)'B', 11 },
-            { (int)'C', 12 },
-            { (int)'D', 13 },
-            { (int)'E', 14 },
-            { (int)'F', 15 },
-            { (int)'G', 16 },
-            { (int)'H', 17 },
-            { (int)'I', 18 },
-            { (int)'J', 19 },
-            { (int)'K', 20 },
-            { (int)'L', 21 },
-            { (int)'M', 22 },
-            { (int)'N', 23 },
-            { (int)'O', 24 },
-            { (int)'P', 25 },
-            { (int)'Q', 26 },
-            { (int)'R', 27 },
-            { (int)'S', 28 },
-            { (int)'T', 29 },
-            { (int)'U', 30 },
-            { (int)'V', 31 },
-            { (int)'W', 32 },
-            { (int)'X', 33 },
-            { (int)'Y', 34 },
-            { (int)'Z', 35 },
-            { (int)':', 36 },
-            { (int)'.', 37 },
-            { (int)' ', 38 },
-        };
-
-        int i;
-
-        for (i = 0; i < sizeof(conversion) / sizeof(conversion[0]); i++)
-        {
-            if (conversion[i].input_character == (int)character)
-            {
-                return conversion[i].output_character;
-            }
-        }
-
         return 0;
     }
 
@@ -197,8 +120,6 @@
             { (int)'.', 37 },
             { (int)' ', 38 }
             };
-
-            character = toupper(character);
             int i;
 
             for (i = 0; i < sizeof(conversion) / sizeof(conversion[0]); i++){
@@ -206,7 +127,6 @@
                     return conversion[i].output_character;
                 }
             }
-
             return -1;
         }
 
@@ -238,7 +158,7 @@
         int i,j;
         for (i=0; i<96; i++){
             for(j=0; j<12; j++){
-                displayBuffer[j][i] = setting;
+                displayBuffer[i][j] = setting;
             }
         }
     }
@@ -328,5 +248,3 @@
             }
         }
     }
-
-
