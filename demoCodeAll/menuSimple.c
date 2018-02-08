@@ -482,8 +482,8 @@ int updateMenuBoxes( enum Buttons buttonPress )
             case 1: //Test duration
                 if(1 == highlightedOption)
                 {   //go into configuration mode (menuNestedLevel = 3)
-                    writeUniqueChar(39, 10, 3, true);
-                    writeUniqueChar(40, 10, 12, true);
+                    writeCharFromIndex(39, 10, 3, true);
+                    writeCharFromIndex(40, 10, 12, true);
                     menuNestedLevel = 3;
                     menuOptionNumber = 1;
                 }

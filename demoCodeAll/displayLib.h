@@ -60,8 +60,6 @@
 
     void initDisplayBuffer(char);
 
-    int character_to_displayfont(const char character);
-
     void displayScene(void);
 
     int charToFontIndex(char);
@@ -74,7 +72,7 @@
 
     void writeChar(char, int, int, bool);
 
-    void writeUniqueChar(int charIndex, int positionX,int positionY, bool inverted);
+    void writeCharFromindex(int charIndex, int positionX,int positionY, bool inverted);
 
     unsigned char * getChar(int, int);
 

@@ -32,7 +32,7 @@
          {
              c = toupper(c);
          }
-         int chIndex = character_to_displayfont(c);
+         int chIndex = charToFontIndex(c);
          unsigned char *toBeWritten = getChar(chIndex,1);
              for (i=0; i<8; i++)
              {
@@ -49,7 +49,7 @@
              }
      }
 
-    void writeUniqueChar(int charIndex, int positionX,int positionY, bool inverted){
+    void writeCharFromIndex(int charIndex, int positionX,int positionY, bool inverted){
          int i=0;
          unsigned char *toBeWritten = getChar(charIndex,1);
              for (i=0; i<8; i++)
@@ -84,67 +84,6 @@
         return 0;
     }
 
-    int character_to_displayfont(const char character)
-    {
-        const static struct
-        {
-            int input_character;
-            int output_character;
-        } conversion[] =
-        {
-            { (int)'0', 0 },
-            { (int)'1', 1 },
-            { (int)'2', 2 },
-            { (int)'3', 3 },
-            { (int)'4', 4 },
-            { (int)'5', 5 },
-            { (int)'6', 6 },
-            { (int)'7', 7 },
-            { (int)'8', 8 },
-            { (int)'9', 9 },
-            { (int)'A', 10 },
-            { (int)'B', 11 },
-            { (int)'C', 12 },
-            { (int)'D', 13 },
-            { (int)'E', 14 },
-            { (int)'F', 15 },
-            { (int)'G', 16 },
-            { (int)'H', 17 },
-            { (int)'I', 18 },
-            { (int)'J', 19 },
-            { (int)'K', 20 },
-            { (int)'L', 21 },
-            { (int)'M', 22 },
-            { (int)'N', 23 },
-            { (int)'O', 24 },
-            { (int)'P', 25 },
-            { (int)'Q', 26 },
-            { (int)'R', 27 },
-            { (int)'S', 28 },
-            { (int)'T', 29 },
-            { (int)'U', 30 },
-            { (int)'V', 31 },
-            { (int)'W', 32 },
-            { (int)'X', 33 },
-            { (int)'Y', 34 },
-            { (int)'Z', 35 },
-            { (int)':', 36 },
-            { (int)'.', 37 },
-            { (int)' ', 38 },
-        };
-
-        int i;
-
-        for (i = 0; i < sizeof(conversion) / sizeof(conversion[0]); i++)
-        {
-            if (conversion[i].input_character == (int)character)
-            {
-                return conversion[i].output_character;
-            }
-        }
-
-        return 0;
-    }
 
 /**********************************************************************
 *   Function name: charToFontIndex
